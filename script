@@ -205,3 +205,5 @@ for i = 1:2 %length(AllSubject)
     EEG = pop_saveset( EEG, 'filename',strcat(AllSubject{i},'_FullyClean.set'),'filepath',StudyPath);
     ALLEEG = []; EEG=[]; CURRENTSET=[];
 end
+
+%% to be tested: epoch, study, ERP, TFA
