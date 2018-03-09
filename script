@@ -1,5 +1,4 @@
 %% Automatized analysis using EEGLAB
-% written by Xiaoping Fang (xpfang4@gmail.com)
 % Data preparation: markup events in NetStation; then expoert data with
 % simple binary formt
 % rename data with Subject ID (e.g., 1001) using EP toollkit (from
@@ -8,23 +7,32 @@
 % the script does not save every file after every step, instead these files
 % are saved: 
 % (1) raw data file with correct channle location file (subject ID); 
-% (2) downsampled (to 500HZ), filterred and line noise clearned file (subject ID_PreRejection
+% (2) downsampled (to 250HZ), filterred and line noise clearned file (subject ID_PreRejection
 % (3) after manual rejection of continuous data (Subject ID_Rejected);
+% Procedure A: not good
 % (4) after bad channel detection, ASR correction, and bad channel
-% intepolation and reference (Subject_PreICA);
+% intepolation and reference (Subject_PreICA); 
 % (5) after ICA (SubjectID_PostICA);
+% Procedure B: prefer
+% (4) after bad channel detection and ICA (SubjectID_ICA_B);
+% (5) after removing artifacr ICs, bad channel replacement and reference (SubjectID_FullyClean;
+
 %% Basic set up and define parameters
 if ismac
    StudyPath = '/Volumes/Samsung_T3/WordLearning_Fall2017/Xiaoping/EEGLAB/';
+   ChannelLocationFile = '/Users/xif20/Documents/MATLAB/eeglab/sample_locs/GSN-Hydrocel-129.ced';
+   ChannelLocationFileLabeled = '/Users/xif20/Documents/MATLAB/eeglab/sample_locs/GSN-Hydrocel-129-labeled.sfp';
+
 elseif ispc
    StudyPath = 'F:\WordLearning_Fall2017\Xiaoping\EEGLAB\';
+   ChannelLocationFile = 'C:\Users\xif20\Documents\MATLAB\eeglab14_1_1b\sample_locs\GSN-Hydrocel-129.ced';
+   ChannelLocationFileLabeled = 'C:\Users\xif20\Documents\MATLAB\eeglab14_1_1b\sample_locs\GSN-Hydrocel-129-labeled.sfp';
+
 elseif isunix
     StudyPath = 'tobedefined'; % not necessary if you never switch to Linux
 else
     disp('Platform not supported')
 end
-
-ChannelLocationFile = '/Users/xif20/Documents/MATLAB/eeglab/sample_locs/GSN-Hydrocel-129.ced';
 
 StudyName = 'WordLearning_Exp7_ERP.study';
 StudyNameShort = 'Exp7';
@@ -32,24 +40,28 @@ TaskName = 'SemanticJudgment';
 StudyNote = 'Embodied';
 
 AllSubject = {...
-    '1001', '1003' '1004' '1005' '1006' '1007' '1008' '1009' '1010' '1011' '1013' '1014'  ...
-    '1016' '1017' '1018' '1019' '1020' '1021' '1022' '1023' '1024' '1025' ...
-    '1026' '1027' '1030' '1031' ...
+    '1001', '1003' '1004' '1005' '1006' '1007' '1008' '1009' '1010' ...
+    '1011' '1013' '1014' '1016' '1017' '1018' '1019' '1020' '1021' ...
+    '1022' '1023' '1024' '1025' '1026' '1027' '1030' '1031' ...
     }; % values are used as subject ID 
+
 Condition = {...
     'NovelAction', 'NovelVisual', ...
     'RealAction', 'RealVisual',...
     }; % 4 conditions: 2 by 2
 
-BandPass = [0.1 80]; % for filter, cut off frequency: 0.1 t0 80.5 HZ
+ConditionShort = {'NvAc', 'NvVs', 'RlAc', 'RlVs'};
+
+BandPass = [0.1 80]; % for filter, cut off frequency: 0.05 t0 80.5 HZ
 
 cd(StudyPath) % go to the folder with all the data files
 STUDY = []; CURRENTSTUDY = 0; ALLEEG = []; EEG=[]; CURRENTSET=[]; % initilize
- [ALLEEG EEG CURRENTSET ALLCOM] = eeglab; % start EEGLAB under Matlab 
+ [ALLEEG EEG CURRENTSET ALLCOM] = eeglab; % start EEGLAB under Matlab
+ 
 %% load the correct channel location file and save the raw data
 % data import and load the correct channel data file
 % detect bad channels: 5SD and take notes on bad channels
-for i = 6:length(AllSubject)
+for i = 1:length(AllSubject)
     RawDataFile = strcat(StudyPath,AllSubject{i},'.raw');
     [ALLEEG EEG CURRENTSET ALLCOM] = eeglab;
     EEG = pop_readegi(RawDataFile, [],[],'auto');
@@ -81,11 +93,11 @@ for i = 1:length(AllSubject)
     ALLEEG = []; EEG=[]; CURRENTSET=[];
 end
 
-%% manual rejction, detect bad channels, using ASR to clean continuous data, intepolate bad channels, and reference to average
+%% manual rejection
 % manual rejection of bad portions of continuous data: take out unusual
 % data while keep stereotical artifacts
 
-for i = 4:length(AllSubject)
+for i = 1:length(AllSubject)
     EEG = pop_loadset('filename',strcat(AllSubject{i},'_PreRejection.set'),'filepath',StudyPath)
     eeglab redraw;
     pop_eegplot( EEG, 1, 1, 1);
@@ -101,10 +113,11 @@ for i = 4:length(AllSubject)
     ALLEEG = []; EEG=[]; CURRENTSET=[];
 end
 
-%% data clean: detect bad channels, using ASR to correct extreme values; replace bad channels; re-reference to average and run ICA
+%% Procedure A: using ASR to correct extreme values; replace bad channels; re-reference to average and then run ICA (with pca option)
+% problem: ICA is performed after bad channel replacemen
 ALLEEG = []; EEG=[]; CURRENTSET=[];
 
-for i = 7:length(AllSubject)
+for i = 1:length(AllSubject)
     EEG = pop_loadset('filename',strcat(AllSubject{i},'_Rejected.set'),'filepath',StudyPath);
     [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
     EEG = clean_rawdata(EEG, -1, [-1], 0.7, -1, 20, 0.25); % use SD of 20 to avoid over clean the data
@@ -137,45 +150,58 @@ for i = 7:length(AllSubject)
     ALLEEG = []; EEG=[]; CURRENTSET=[];
 end
 
-
-%% New procedure: run ICA, remove components, then interpolate bad channels and reference the data
-
+%% Procedure B: detect bad channels, remove components using MARA, then interpolate bad channels and reference the data
+% note: need to change channel location file because MARA only recognize I 10-10 lables;
 ALLEEG = []; EEG=[]; CURRENTSET=[];
 
-
-for i = 3:length(AllSubject)
+for i = 1:2 %length(AllSubject)
     EEG = pop_loadset('filename',strcat(AllSubject{i},'_Rejected.set'),'filepath',StudyPath);
+    EEG=pop_chanedit(EEG, 'load',{ChannelLocationFileLabeled 'filetype' 'autodetect'},'changefield',{132 'datachan' 0});
     [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
-    EEG = clean_rawdata(EEG, -1, [-1], 0.7, -1, 20, 0.25); % use SD of 20 to avoid over clean the data
-    EEG.comments = pop_comments(EEG.comments,'','Data were cleaned with ASR.',1);
-    [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
-    EEG = pop_saveset( EEG, 'filename',strcat(AllSubject{i},'_ASR.set'),'filepath',StudyPath);
+    EEG = pop_rejchan(EEG,'elec',[1:128] ,'threshold',5,'norm','on','measure','kurt'); % use SD of 20 to avoid over clean the data
+    EEG.comments = pop_comments(EEG.comments,'','Bad channels are screened.',1);
     EEG = pop_runica(EEG, 'extended',1,'interupt','on');
-    EEG = pop_saveset( EEG, 'filename',strcat(AllSubject{i},'_ICA_First.set'),'filepath',StudyPath);
+    [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
+    EEG = pop_saveset( EEG, 'filename',strcat(AllSubject{i},'_ICA_B.set'),'filepath',StudyPath);
+    [ALLEEG,EEG,CURRENTSET] = processMARA(ALLEEG,EEG,CURRENTSET);
+    [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
+    EEG.reject.gcompreject = zeros(size(EEG.reject.gcompreject)); 
+    EEG.reject.gcompreject(EEG.reject.MARAinfo.posterior_artefactprob > 0.6) = 1;
+    CompNumber = find(EEG.reject.gcompreject);
+    EEG = pop_subcomp(EEG,CompNumber,0);
+    [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
+    
+%     % plot the data for visual inspection: check if the data is good after
+%     % removal of artifacted ICs
+%     eeglab redraw;
+%     pop_eegplot( EEG, 1, 1, 1);
+%     ud=get(gcf,'UserData');
+%     ud.winlength=60;
+%     set(gcf,'UserData',ud);     
+%     eegplot('draws',0)          
+% 
+%     uiwait; % stop for manual rejection of continuous data AND check bad electrodes
+%     
+      
+    
+    % bad channel replacement if applicable
+    if EEG.nbchan < 128     
+    ChanToReplace = setdiff({ALLEEG(1).chanlocs.labels},{ALLEEG(CURRENTSET).chanlocs.labels});
+    ChanNumToReplace = zeros(1,length(ChanToReplace));
+    for k = 1 : length(ChanNumToReplace)
+        cellContents = ChanToReplace{k};
+        % Truncate and stick back into the cell
+        ChanNumToReplace(k) = strmatch(cellContents,{ALLEEG(1).chanlocs.labels});
+    end
+    validchan = 128 - length(ChanNumToReplace);
+    EEG = pop_interp(EEG, ALLEEG(1).chanlocs(ChanNumToReplace), 'spherical'); % get the values from channels defined in the previous step (may need to use other chanlocas file info.
+    EEG.comments = pop_comments(EEG.comments,'',strcat('Bad channels were deleted and intepolated: ',num2str(ChanNumToReplace)),1);
+    else
+        validchan = 128;
+    end
+    % reference to Cz
+    EEG = pop_reref( EEG, [],'refloc',struct('labels',{'Cz'},'Y',{0},'X',{5.4492e-16},'Z',{8.8992},'sph_theta',{0},'sph_phi',{90},'sph_radius',{8.8992},'theta',{0},'radius',{0},'type',{''},'ref',{''},'urchan','Cz','datachan',{0}));
+    EEG.comments = pop_comments(EEG.comments,'','Data were rereferenced to average.',1);
+    EEG = pop_saveset( EEG, 'filename',strcat(AllSubject{i},'_FullyClean.set'),'filepath',StudyPath);
     ALLEEG = []; EEG=[]; CURRENTSET=[];
 end
-
-%% Use Adjust to faciliate the detection of artifact ICs.
-
-    EEG = pop_loadset('filename',strcat(AllSubject{i},'_ICA_First.set'),'filepath',StudyPath);
-    eeglab redraw;
-    pop_ADJUST_interface(strcat(AllSubject{i},'_ICA_First.set'));
-     
-
-%% after removing artifact components, intepolate the channels and reference the data
-
-
-
-%% create a study with no design to make compoment rejection easier?
-% to check ICA results: double check the parameters are good for every
-% participants
-
-    EEG = pop_loadset('filename',strcat(AllSubject{i},'_PostICA.set'),'filepath',StudyPath);
-    [ALLEEG EEG CURRENTSET] = eeg_store(ALLEEG, EEG);
-
-% use Adjust for suggestions about ICs to remove
-%%
-EEG = eeg_checkset( EEG );
-pop_eegplot( EEG, 0, 1, 1);
-EEG = eeg_checkset( EEG );
-pop_eegplot( EEG, 1, 1, 1);
